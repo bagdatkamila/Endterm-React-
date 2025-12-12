@@ -1,58 +1,38 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { filterActivities, getActivityByKey } from "../../api/boredApi";
 
-// Получаем список активностей с фильтром
-export const fetchActivities = createAsyncThunk(
-  "items/fetchActivities",
-  async ({ type, participants }) => {
-    const data = await filterActivities({ type, participants });
-    return data;
-  }
-);
+const initialState = {
+  items: [],
+  selectedItem: null,
+  loading: false,
+  error: null,
+  loadingItem: false,
+  errorItem: null,
+};
 
-// Получаем активность по ключу
+// Получение деталей
 export const fetchActivityByKey = createAsyncThunk(
   "items/fetchActivityByKey",
-  async (key) => {
-    const data = await getActivityByKey(key);
-    return data;
+  async (key, { rejectWithValue }) => {
+    try {
+      return await getActivityByKey(key);
+    } catch (err) {
+      return rejectWithValue(err.message);
+    }
   }
 );
 
 const itemsSlice = createSlice({
   name: "items",
-  initialState: {
-    list: [],
-    selectedItem: null,
-    loadingList: false,
-    loadingItem: false,
-    errorList: null,
-    errorItem: null,
-  },
+  initialState,
   reducers: {
     clearSelectedItem(state) {
       state.selectedItem = null;
-      state.loadingItem = false;
       state.errorItem = null;
+      state.loadingItem = false;
     },
   },
   extraReducers: (builder) => {
-    // Список активностей
-    builder
-      .addCase(fetchActivities.pending, (state) => {
-        state.loadingList = true;
-        state.errorList = null;
-      })
-      .addCase(fetchActivities.fulfilled, (state, action) => {
-        state.loadingList = false;
-        state.list = action.payload;
-      })
-      .addCase(fetchActivities.rejected, (state, action) => {
-        state.loadingList = false;
-        state.errorList = action.error.message;
-      });
-
-    // Детали активности
     builder
       .addCase(fetchActivityByKey.pending, (state) => {
         state.loadingItem = true;
@@ -64,7 +44,7 @@ const itemsSlice = createSlice({
       })
       .addCase(fetchActivityByKey.rejected, (state, action) => {
         state.loadingItem = false;
-        state.errorItem = action.error.message;
+        state.errorItem = action.payload;
       });
   },
 });

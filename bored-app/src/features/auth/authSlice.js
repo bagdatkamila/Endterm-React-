@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import { auth } from "../../firebase/firebaseConfig";
 import { signupUser as apiSignup, loginUser as apiLogin, logoutUser as apiLogout, subscribeToAuth } from "../../api/authService";
+import { loadFavorites } from "../favorites/favoritesSlice";
 
 const initialState = {
   user: null,
@@ -14,7 +14,12 @@ export const registerUser = createAsyncThunk(
   async ({ email, password }, { rejectWithValue }) => {
     try {
       const user = await apiSignup(email, password);
-      return user;
+      return {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+      };
     } catch (err) {
       return rejectWithValue(err.message);
     }
@@ -26,7 +31,13 @@ export const loginUserThunk = createAsyncThunk(
   "auth/loginUser",
   async ({ email, password }, { rejectWithValue }) => {
     try {
-      return await apiLogin(email, password);
+      const user = await apiLogin(email, password);
+      return {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+      };
     } catch (err) {
       return rejectWithValue(err.message);
     }
@@ -36,7 +47,10 @@ export const loginUserThunk = createAsyncThunk(
 // =============== LOGOUT ===============
 export const logoutThunk = createAsyncThunk(
   "auth/logout",
-  async () => await apiLogout()
+  async () => {
+    await apiLogout();
+    return null;
+  }
 );
 
 // =============== SLICE ===============
@@ -45,7 +59,14 @@ const authSlice = createSlice({
   initialState,
   reducers: {
     setUser(state, action) {
-      state.user = action.payload;
+      state.user = action.payload
+        ? {
+            uid: action.payload.uid,
+            email: action.payload.email,
+            displayName: action.payload.displayName,
+            photoURL: action.payload.photoURL,
+          }
+        : null;
       state.loading = false;
       state.error = null;
     },
@@ -53,15 +74,12 @@ const authSlice = createSlice({
       state.user = null;
       state.loading = false;
       state.error = null;
-    }
+    },
   },
   extraReducers: (builder) => {
     builder
-
-      // REGISTER
       .addCase(registerUser.pending, (state) => {
         state.loading = true;
-        state.error = null;
       })
       .addCase(registerUser.fulfilled, (state, action) => {
         state.loading = false;
@@ -70,17 +88,48 @@ const authSlice = createSlice({
       .addCase(registerUser.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
-      });
+      })
 
-  }
+      .addCase(loginUserThunk.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(loginUserThunk.fulfilled, (state, action) => {
+        state.loading = false;
+        state.user = action.payload;
+      })
+      .addCase(loginUserThunk.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+
+      .addCase(logoutThunk.fulfilled, (state) => {
+        state.user = null;
+        state.loading = false;
+        state.error = null;
+      });
+  },
 });
 
 export const { setUser, clearUser } = authSlice.actions;
 export default authSlice.reducer;
 
+// =============== INIT AUTH LISTENER ===============
 export const initAuthListener = () => (dispatch) => {
   subscribeToAuth((user) => {
-    if (user) dispatch(setUser(user));
-    else dispatch(clearUser());
+    if (user) {
+      const payload = {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+      };
+
+      dispatch(setUser(payload));
+      dispatch(loadFavorites({ uid: user.uid }));
+
+    } else {
+      dispatch(clearUser());
+      dispatch(loadFavorites({ uid: null }));
+    }
   });
 };
